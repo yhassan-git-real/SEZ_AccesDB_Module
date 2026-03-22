@@ -1,0 +1,34 @@
+## ── .NET Build Artifacts ─────────────────────────────────────────────────────
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## ── NuGet ────────────────────────────────────────────────────────────────────
+*.nupkg
+.nuget/
+packages/
+
+## ── Rider / VS Code / JetBrains ──────────────────────────────────────────────
+.idea/
+*.DotSettings.user
+.vscode/
+
+## ── Runtime Output (do not commit generated files) ──────────────────────────
+Output/
+Logs/
+
+## ── Access Database output files ─────────────────────────────────────────────
+*.accdb
+*.laccdb
+*.mdb
+
+## ── OS / System ──────────────────────────────────────────────────────────────
+Thumbs.db
+.DS_Store
+desktop.ini
+
+## ── Sensitive config (keep appsettings in repo, exclude overrides) ───────────
+appsettings.Production.json
+appsettings.Local.json
