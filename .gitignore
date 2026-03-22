@@ -1,3 +1,7 @@
+## ── Project-specific exclusions ─────────────────────────────────────────────
+Database_Scripts/
+Requirement.md
+
 ## ── .NET Build Artifacts ─────────────────────────────────────────────────────
 bin/
 obj/
