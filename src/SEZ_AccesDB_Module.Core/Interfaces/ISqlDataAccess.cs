@@ -37,4 +37,10 @@ public interface ISqlDataAccess
     /// Inserts an audit log record into the AuditLog table.
     /// </summary>
     Task InsertAuditRecordAsync(string tableName, AuditRecord record, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns true if a user table with the given name exists in the current database.
+    /// Used to detect SP-created sub-tables (e.g. EXP_OTHERS_1, EXP_OTHERS_2).
+    /// </summary>
+    Task<bool> TableExistsAsync(string tableName, CancellationToken ct = default);
 }

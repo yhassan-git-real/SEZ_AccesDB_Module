@@ -142,4 +142,20 @@ public class SqlDataAccess : ISqlDataAccess
             record.Comment
         });
     }
+
+    /// <inheritdoc/>
+    public async Task<bool> TableExistsAsync(string tableName, CancellationToken ct = default)
+    {
+        const string sql = """
+            SELECT COUNT(1) FROM sys.objects
+            WHERE object_id = OBJECT_ID(@name) AND type = 'U'
+            """;
+
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+        cmd.Parameters.AddWithValue("@name", tableName);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result) > 0;
+    }
 }

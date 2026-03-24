@@ -1,0 +1,26 @@
+{
+  "StoredProcedures": [
+    {
+      "Name": "Others_EXP_10Days",
+      "DisplayName": "Export 10 Days (Date Range)",
+      "DataType": "Export",
+      "StagingTable": "EXP_OTHERS",
+      "Parameters": [
+        "mon",
+        "mon1"
+      ],
+      "FilePrefix": "Export_10Days"
+    },
+    {
+      "Name": "Others_IMP_10Days",
+      "DisplayName": "Import 10 Days (Date Range)",
+      "DataType": "Import",
+      "StagingTable": "IMP_OTHERS",
+      "Parameters": [
+        "mon",
+        "mon1"
+      ],
+      "FilePrefix": "Import_10Days"
+    }
+  ]
+}

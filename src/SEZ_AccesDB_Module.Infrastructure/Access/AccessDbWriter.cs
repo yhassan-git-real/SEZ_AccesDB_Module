@@ -128,11 +128,35 @@ public class AccessDbWriter : IAccessDbWriter
         if (File.Exists(filePath))
             File.Delete(filePath);
 
-        // ACE OLE DB creates an empty .accdb when the file doesn't exist and Engine Type=5
-        var connStr = $"Provider=Microsoft.ACE.OLEDB.12.0;Data Source={filePath};Jet OLEDB:Engine Type=5;";
-        using var conn = new OleDbConnection(connStr);
-        conn.Open();
+        // ADOX Catalog.Create() is the correct way to create a blank .accdb file.
+        // This requires the Microsoft Access Database Engine 2016 Redistributable (64-bit).
+        // ProgID:  ADOX.Catalog  or  ADOX.Catalog (registered by ACE installer)
+        var catalogType = Type.GetTypeFromProgID("ADOX.Catalog")
+            ?? throw new InvalidOperationException(
+                "ADOX.Catalog COM object not found. " +
+                "Please install the Microsoft Access Database Engine 2016 Redistributable (64-bit) " +
+                "from https://www.microsoft.com/en-us/download/details.aspx?id=54920");
+
+        dynamic catalog = Activator.CreateInstance(catalogType)
+            ?? throw new InvalidOperationException("Failed to create ADOX.Catalog instance.");
+
+        try
+        {
+            var createConnStr =
+                $"Provider=Microsoft.ACE.OLEDB.12.0;Data Source={filePath};Jet OLEDB:Engine Type=5;";
+            catalog.Create(createConnStr);
+        }
+        finally
+        {
+            // Release COM object immediately to avoid file lock
+            System.Runtime.InteropServices.Marshal.FinalReleaseComObject(catalog);
+        }
+
+        if (!File.Exists(filePath))
+            throw new InvalidOperationException(
+                $"ADOX.Catalog.Create() completed but the file was not created at: {filePath}");
     }
+
 
     private static string BuildConnectionString(string filePath) =>
         $"Provider=Microsoft.ACE.OLEDB.12.0;Data Source={filePath};";

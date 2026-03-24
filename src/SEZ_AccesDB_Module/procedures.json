@@ -2,130 +2,66 @@
   "StoredProcedures": [
     {
       "Name": "Others_EXP_BTD",
-      "DisplayName": "Export BTD (Date Range)",
+      "DisplayName": "Export BTD (Between Two Dates)",
       "DataType": "Export",
       "StagingTable": "Exp_Monthly",
-      "Parameters": [
-        "mon",
-        "mon1"
-      ],
+      "Parameters": [ "mon", "mon1" ],
       "FilePrefix": "Export_BTD"
     },
     {
-      "Name": "Others_IMP_BTD",
-      "DisplayName": "Import BTD (Date Range)",
-      "DataType": "Import",
-      "StagingTable": "Imp_Monthly",
-      "Parameters": [
-        "mon",
-        "mon1"
-      ],
-      "FilePrefix": "Import_BTD"
-    },
-    {
       "Name": "Others_EXP_FULL",
-      "DisplayName": "Export FULL (Date Range)",
+      "DisplayName": "Export FULL (Between Two Dates)",
       "DataType": "Export",
       "StagingTable": "EXP_OTHERS_FULL",
-      "Parameters": [
-        "mon",
-        "mon1"
-      ],
-      "FilePrefix": "Export_Full"
-    },
-    {
-      "Name": "Others_IMP_FULL",
-      "DisplayName": "Import FULL (Date Range)",
-      "DataType": "Import",
-      "StagingTable": "IMP_OTHERS_FULL",
-      "Parameters": [
-        "mon",
-        "mon1"
-      ],
-      "FilePrefix": "Import_Full"
-    },
-    {
-      "Name": "Others_EXP_SEZ",
-      "DisplayName": "Export SEZ (Single Month YYYYMM)",
-      "DataType": "Export",
-      "StagingTable": "EXP_OTHERS_SEZ",
-      "Parameters": [
-        "mon"
-      ],
-      "FilePrefix": "Export_SEZ"
-    },
-    {
-      "Name": "Others_IMP_SEZ",
-      "DisplayName": "Import SEZ (Single Month YYYYMM)",
-      "DataType": "Import",
-      "StagingTable": "IMP_OTHERS_SEZ",
-      "Parameters": [
-        "mon"
-      ],
-      "FilePrefix": "Import_SEZ"
-    },
-    {
-      "Name": "Others_EXP_SEZ_FULL",
-      "DisplayName": "Export SEZ FULL (Date Range)",
-      "DataType": "Export",
-      "StagingTable": "EXP_OTHERS_SEZ_FULL",
-      "Parameters": [
-        "mon",
-        "mon1"
-      ],
-      "FilePrefix": "Export_SEZ_Full"
-    },
-    {
-      "Name": "Others_IMP_SEZ_FULL",
-      "DisplayName": "Import SEZ FULL (Date Range)",
-      "DataType": "Import",
-      "StagingTable": "IMP_OTHERS_SEZ_FULL",
-      "Parameters": [
-        "mon",
-        "mon1"
-      ],
-      "FilePrefix": "Import_SEZ_Full"
+      "Parameters": [ "mon", "mon1" ],
+      "FilePrefix": "Export_FULL"
     },
     {
       "Name": "Others_EXP_new",
-      "DisplayName": "Export NEW Format (Date Range)",
+      "DisplayName": "Export New (Between Two Dates)",
       "DataType": "Export",
       "StagingTable": "exp_new",
-      "Parameters": [
-        "mon",
-        "mon1"
-      ],
+      "Parameters": [ "mon", "mon1" ],
       "FilePrefix": "Export_New"
     },
     {
-      "Name": "Others_IMP_new",
-      "DisplayName": "Import NEW Format (Date Range)",
-      "DataType": "Import",
-      "StagingTable": "new_imp",
-      "Parameters": [
-        "mon",
-        "mon1"
-      ],
-      "FilePrefix": "Import_New"
-    },
-    {
       "Name": "Others_EXP_Vishal",
-      "DisplayName": "Export Vishal Format (Single Month YYYYMM)",
+      "DisplayName": "Export Vishal (Date Range)",
       "DataType": "Export",
       "StagingTable": "exp_new_v",
-      "Parameters": [
-        "mon"
-      ],
+      "Parameters": [ "mon", "mon1" ],
       "FilePrefix": "Export_Vishal"
     },
     {
+      "Name": "Others_IMP_BTD",
+      "DisplayName": "Import BTD (Between Two Dates)",
+      "DataType": "Import",
+      "StagingTable": "Imp_Monthly",
+      "Parameters": [ "mon", "mon1" ],
+      "FilePrefix": "Import_BTD"
+    },
+    {
+      "Name": "Others_IMP_FULL",
+      "DisplayName": "Import FULL (Between Two Dates)",
+      "DataType": "Import",
+      "StagingTable": "IMP_OTHERS_FULL",
+      "Parameters": [ "mon", "mon1" ],
+      "FilePrefix": "Import_FULL"
+    },
+    {
+      "Name": "Others_IMP_new",
+      "DisplayName": "Import New (Between Two Dates)",
+      "DataType": "Import",
+      "StagingTable": "new_imp",
+      "Parameters": [ "mon", "mon1" ],
+      "FilePrefix": "Import_New"
+    },
+    {
       "Name": "Others_IMP_Vishal",
-      "DisplayName": "Import Vishal Format (Single Month YYYYMM)",
+      "DisplayName": "Import Vishal (Date Range)",
       "DataType": "Import",
       "StagingTable": "new_imp_v",
-      "Parameters": [
-        "mon"
-      ],
+      "Parameters": [ "mon", "mon1" ],
       "FilePrefix": "Import_Vishal"
     }
   ]

@@ -4,7 +4,6 @@ public class AppSettings
 {
     public ConnectionStringsConfig ConnectionStrings { get; set; } = new();
     public FileSettingsConfig FileSettings { get; set; } = new();
-    public SplitThresholdsConfig SplitThresholds { get; set; } = new();
     public List<StoredProcedureDefinition> StoredProcedures { get; set; } = new();
     public AuditConfig Audit { get; set; } = new();
     public LoggingConfig Logging { get; set; } = new();
@@ -21,12 +20,6 @@ public class FileSettingsConfig
     public string Extension { get; set; } = ".accdb";
 }
 
-public class SplitThresholdsConfig
-{
-    public long Import { get; set; } = 1_500_000;
-    public long Export { get; set; } = 2_000_000;
-    public long ChunkSize { get; set; } = 500_000;
-}
 
 public class StoredProcedureDefinition
 {
