@@ -35,12 +35,10 @@ public class FileManagerService : IFileManager
 
         if (totalRows <= threshold)
         {
-            // Single file
             chunks.Add(new ChunkRange { FileIndex = 1, StartRow = 0, EndRow = totalRows - 1 });
         }
         else
         {
-            // Multiple files — split into chunkSize slices
             long remaining = totalRows;
             long currentStart = 0;
             int fileIndex = 1;

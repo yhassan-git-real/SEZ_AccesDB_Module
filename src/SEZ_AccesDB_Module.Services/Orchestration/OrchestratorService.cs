@@ -56,7 +56,6 @@ public class OrchestratorService
         AnsiConsole.MarkupLine("[green][[INFO]][/] SQL Server connection [bold]OK[/].");
         Log.Information("SQL Server connection established successfully.");
 
-        // Show session info panel: server, database, auth, paths
         var logDir = string.IsNullOrWhiteSpace(_settings.Logging.LogPath)
             ? Path.Combine(AppContext.BaseDirectory, "Logs")
             : _settings.Logging.LogPath;
@@ -75,11 +74,9 @@ public class OrchestratorService
         {
             try
             {
-                // SP selection
                 var menu       = new SpSelectionMenu(_settings.StoredProcedures);
                 var selectedSp = menu.SelectProcedure();
 
-                // Parameter input
                 var paramHelper = new ParameterInputHelper();
                 var parameters  = paramHelper.CollectParameters(selectedSp);
                 var filePrefix  = paramHelper.CollectFileNamePrefix(selectedSp.FilePrefix);

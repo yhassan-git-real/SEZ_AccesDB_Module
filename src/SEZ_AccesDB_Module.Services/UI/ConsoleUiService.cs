@@ -70,8 +70,24 @@ public static class ConsoleUiService
         table.AddRow("Parameters",       Markup.Escape(ctx.ParameterSummary));
         table.AddRow("Process ID",       $"[bold]{Markup.Escape(ctx.ProcessId)}[/]");
         table.AddRow("Start Time",       ctx.StartTime.ToString("yyyy-MM-dd HH:mm:ss"));
-        table.AddRow("Duration",         $"{result.Duration.TotalSeconds:F1}s");
+        table.AddRow("Total Duration",   $"[bold]{FormatDuration(result.Duration)}[/]");
+
+        // ── Phase breakdown ────────────────────────────────────────────────────
+        table.AddRow("[grey]  SP Execution[/]", result.SpExecutionTime > TimeSpan.Zero
+            ? $"[grey]{FormatDuration(result.SpExecutionTime)}[/]"
+            : "[grey]—[/]");
+        table.AddRow("[grey]  Data Load & Write[/]", result.WriteTime > TimeSpan.Zero
+            ? $"[grey]{FormatDuration(result.WriteTime)}[/]"
+            : "[grey]—[/]");
+        table.AddRow("[grey]  Overhead (other)[/]", result.SpExecutionTime > TimeSpan.Zero && result.WriteTime > TimeSpan.Zero
+            ? $"[grey]{FormatDuration(result.Duration - result.SpExecutionTime - result.WriteTime)}[/]"
+            : "[grey]—[/]");
+
+        // ── Throughput ─────────────────────────────────────────────────────────
         table.AddRow("Total Rows Read",  $"[yellow]{result.TotalRowsRead:N0}[/]");
+        if (result.RowsPerSecond > 0)
+            table.AddRow("[grey]  Write Speed[/]",  $"[grey]{result.RowsPerSecond:N0} rows/sec[/]");
+
         table.AddRow("Total Files",      result.TotalFilesCreated.ToString());
         table.AddRow("Success Files",    $"[green]{result.SuccessFileCount}[/]");
         table.AddRow("Error Files",      result.ErrorFileCount > 0 ? $"[red]{result.ErrorFileCount}[/]" : "0");
@@ -124,6 +140,12 @@ public static class ConsoleUiService
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>Formats a TimeSpan as "Xm Ys" (>= 1 min) or "X.Xs" (< 1 min).</summary>
+    private static string FormatDuration(TimeSpan ts) =>
+        ts.TotalMinutes >= 1
+            ? $"{(int)ts.TotalMinutes}m {ts.Seconds:D2}s"
+            : $"{ts.TotalSeconds:F1}s";
 
     /// <summary>Wraps text at the given column width, preserving whole words.</summary>
     private static string WordWrap(string text, int maxWidth)

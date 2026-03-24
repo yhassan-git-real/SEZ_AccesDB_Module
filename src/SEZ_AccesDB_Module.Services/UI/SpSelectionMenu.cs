@@ -38,7 +38,6 @@ public class SpSelectionMenu
         if (selected == "[grey]Exit[/]")
             throw new OperationCanceledException("User chose to exit.");
 
-        // Match back to the SP definition
         int idx = choices.IndexOf(selected);
         if (idx < 0 || idx >= _procedures.Count)
             throw new InvalidOperationException("Invalid selection.");

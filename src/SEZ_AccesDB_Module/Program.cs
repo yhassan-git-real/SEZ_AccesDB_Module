@@ -18,8 +18,6 @@ using Spectre.Console;
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 // ── 1. Load Configuration ───────────────────────────────────────────────────
-//   appsettings.json  → connection, paths, thresholds, audit, logging
-//   procedures.json   → stored procedure definitions (separate for easy editing)
 var configBuilder = new ConfigurationBuilder()
     .SetBasePath(AppContext.BaseDirectory)
     .AddJsonFile("appsettings.json",  optional: false, reloadOnChange: false)
@@ -82,12 +80,11 @@ var serviceProvider = services.BuildServiceProvider();
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
 {
-    e.Cancel = true;   // prevent immediate OS kill so we can clean up
+    e.Cancel = true;
     cts.Cancel();
     AnsiConsole.MarkupLine("\n[yellow][[WARNING]][/] Ctrl+C detected — cancelling gracefully...");
 
-    // Spectre.Console prompts are blocking and never observe the CancellationToken,
-    // so we force exit after a short grace period to let any in-flight async work finish.
+    // Spectre.Console prompts never observe CancellationToken, so force exit after a grace period
     Task.Run(async () =>
     {
         await Task.Delay(1500);

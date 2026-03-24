@@ -11,8 +11,7 @@ using ExecutionContext = SEZ_AccesDB_Module.Core.Models.ExecutionContext;
 namespace SEZ_AccesDB_Module.Services.Etl;
 
 /// <summary>
-/// Orchestrates the ETL pipeline for a single stored procedure execution.
-/// Flow: Execute SP → Detect sub-tables → Write one Access file per source table.
+/// Orchestrates the ETL pipeline: Execute SP → Detect sub-tables → Write one Access file per source table.
 /// </summary>
 public class EtlEngineService : IEtlEngine
 {
@@ -46,15 +45,17 @@ public class EtlEngineService : IEtlEngine
         {
             var spDef = context.SpDefinition;
 
-            // ── Step 1: Execute Stored Procedure ──────────────────────────────
+            // ── Step 1: Execute Stored Procedure ───────────────────────────────
             AnsiConsole.MarkupLine($"\n[cyan][[1/5]][/] Executing [bold]{Markup.Escape(spDef.Name)}[/] | Parameters: [yellow]{Markup.Escape(context.ParameterSummary)}[/]");
             _logger.LogInformation("[{Pid}] Executing SP: {SP} | Params: {Params}",
                 context.ProcessId, spDef.Name, context.ParameterSummary);
 
+            var phaseWatch = System.Diagnostics.Stopwatch.StartNew();
             await _sql.ExecuteStoredProcedureAsync(spDef.Name, context.Parameters, ct);
-            AnsiConsole.MarkupLine("[green]  ✓ Stored procedure executed successfully.[/]");
+            result.SpExecutionTime = phaseWatch.Elapsed;
+            AnsiConsole.MarkupLine($"[green]  ✓ Stored procedure executed successfully.[/] [grey]({FormatDuration(result.SpExecutionTime)})[/]");
 
-            // ── Step 2: Verify staging table has rows ──────────────────────────
+            // ── Step 2: Verify staging table has rows ────────────────────────────
             AnsiConsole.MarkupLine($"[cyan][[2/5]][/] Counting rows in [bold]{Markup.Escape(spDef.StagingTable)}[/]...");
             long totalRows = await _sql.GetRowCountAsync(spDef.StagingTable, ct);
 
@@ -71,9 +72,8 @@ public class EtlEngineService : IEtlEngine
                 return result;
             }
 
-            // ── Step 3: Detect SP-created sub-tables (dynamic, no hardcoded names) ──
-            //   The SP may produce {StagingTable}_1, {StagingTable}_2 ... when row count
-            //   exceeds the SP's internal threshold. We detect these at runtime.
+            // ── Step 3: Detect SP-created sub-tables ─────────────────────────────
+            // SPs exceeding their row threshold split data into {StagingTable}_1, _2 ...
             AnsiConsole.MarkupLine($"[cyan][[3/5]][/] Detecting SP sub-tables for [bold]{Markup.Escape(spDef.StagingTable)}[/]...");
             var sourceTables = await ResolveSourceTablesAsync(spDef.StagingTable, ct);
 
@@ -92,11 +92,12 @@ public class EtlEngineService : IEtlEngine
                     context.ProcessId, string.Join(", ", sourceTables));
             }
 
-            // ── Step 4: Ensure Output Directory ────────────────────────────────
+            // ── Step 4: Ensure Output Directory ──────────────────────────────────
             _fileManager.EnsureOutputDirectory(_settings.FileSettings.OutputPath);
 
-            // ── Step 5: For each source table → open fresh reader → write one Access file ─
+            // ── Step 5: Stream + write one Access file per source table ───────────
             AnsiConsole.MarkupLine($"[cyan][[4/5]][/] Writing {sourceTables.Count} Access file(s)...\n");
+            phaseWatch.Restart();
 
             for (int i = 0; i < sourceTables.Count; i++)
             {
@@ -105,14 +106,10 @@ public class EtlEngineService : IEtlEngine
                 var sourceTable = sourceTables[i];
                 var fileIndex   = i + 1;
 
-                // File naming follows the defined convention:
-                //   1 file  → {prefix}_{ddMMyyyy}.accdb
-                //   N files → {prefix}_{N}_{ddMMyyyy}.accdb
                 var filePath = sourceTables.Count == 1
                     ? _fileManager.GetSingleFilePath(_settings.FileSettings.OutputPath, context.OutputFilePrefix, context.StartTime, _settings.FileSettings.Extension)
                     : _fileManager.GetChunkFilePath(_settings.FileSettings.OutputPath, context.OutputFilePrefix, fileIndex, context.StartTime, _settings.FileSettings.Extension);
 
-                // Row count for this specific source table
                 var tableRows = await _sql.GetRowCountAsync(sourceTable, ct);
 
                 _logger.LogInformation("[{Pid}] File {N}/{Total}: [{Src}] → {File} ({Rows:N0} rows)",
@@ -125,13 +122,11 @@ public class EtlEngineService : IEtlEngine
                 long fileRowsWritten = 0;
                 long fileRowErrors   = 0;
 
-                // Fresh reader opened per file — avoids complex row-skipping
                 var selectSql = $"SELECT * FROM [{sourceTable}]";
                 using var reader = await _sql.GetDataReaderAsync(selectSql, ct);
 
                 var schema = reader.GetSchemaTable()
-                    ?? throw new InvalidOperationException(
-                        $"Could not get schema from [{sourceTable}].");
+                    ?? throw new InvalidOperationException($"Could not get schema from [{sourceTable}].");
 
                 await AnsiConsole.Progress()
                     .AutoClear(false)
@@ -149,7 +144,9 @@ public class EtlEngineService : IEtlEngine
 
                         fileRowsWritten = await _accessWriter.WriteChunkAsync(
                             filePath:   filePath,
-                            tableName:  spDef.StagingTable,   // Access table name = base table (consistent naming)
+                            tableName:  sourceTables.Count == 1
+                                ? context.OutputFilePrefix
+                                : $"{context.OutputFilePrefix}_{fileIndex}",
                             reader:     reader,
                             schema:     schema,
                             rowCount:   tableRows,
@@ -179,6 +176,7 @@ public class EtlEngineService : IEtlEngine
                     context.ProcessId, fileIndex, filePath, fileRowsWritten, fileRowErrors);
             }
 
+            result.WriteTime = phaseWatch.Elapsed;
             result.Success = true;
         }
         catch (OperationCanceledException)
@@ -237,14 +235,14 @@ public class EtlEngineService : IEtlEngine
         return result;
     }
 
-    // ─── Helpers ───────────────────────────────────────────────────────────────
+    private static string FormatDuration(TimeSpan ts) =>
+        ts.TotalMinutes >= 1
+            ? $"{(int)ts.TotalMinutes}m {ts.Seconds:D2}s"
+            : $"{ts.TotalSeconds:F1}s";
 
     /// <summary>
-    /// Detects SP-created sub-tables dynamically by checking for
-    /// {baseTable}_1, {baseTable}_2 ... up to _9.
-    /// Returns the list of sub-tables if any exist, otherwise returns
-    /// a list containing only the base staging table.
-    /// No table names are hardcoded — names are always derived from StagingTable.
+    /// Checks for SP-created sub-tables ({baseTable}_1, _2 ... up to _9).
+    /// Returns sub-tables if found, otherwise returns a list with only the base table.
     /// </summary>
     private async Task<List<string>> ResolveSourceTablesAsync(string baseTable, CancellationToken ct)
     {
@@ -256,16 +254,15 @@ public class EtlEngineService : IEtlEngine
             if (await _sql.TableExistsAsync(candidate, ct))
                 subTables.Add(candidate);
             else
-                break; // stop at first missing index — no gaps expected
+                break;
         }
 
-        // If no sub-tables found, fall back to the main staging table
         return subTables.Count > 0 ? subTables : new List<string> { baseTable };
     }
 
     /// <summary>
-    /// Translates a SqlException into a plain-English sentence for console display.
-    /// Full stack trace still goes to errorlog file.
+    /// Maps SQL error numbers to user-friendly messages for console display.
+    /// Full stack trace is still written to the error log file.
     /// </summary>
     private static string FriendlySqlMessage(SqlException ex) =>
         ex.Number switch

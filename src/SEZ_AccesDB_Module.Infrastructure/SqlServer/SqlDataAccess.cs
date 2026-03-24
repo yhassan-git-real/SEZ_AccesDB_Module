@@ -56,7 +56,6 @@ public class SqlDataAccess : ISqlDataAccess
             CommandTimeout = 3600
         };
 
-        // CommandBehavior.CloseConnection: connection closes when reader is disposed
         return await cmd.ExecuteReaderAsync(CommandBehavior.CloseConnection, ct);
     }
 
@@ -66,7 +65,6 @@ public class SqlDataAccess : ISqlDataAccess
         await using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync(ct);
 
-        // Use sysindexes for fast approximate count first; fall back to exact COUNT(*)
         var sql = $"SELECT COUNT_BIG(*) FROM [{tableName}]";
         await using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 600 };
         var result = await cmd.ExecuteScalarAsync(ct);
