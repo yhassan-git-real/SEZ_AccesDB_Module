@@ -14,6 +14,9 @@ public class SqlDataAccess : ISqlDataAccess
 {
     private readonly string _connectionString;
 
+    private static readonly int[] TransientSqlErrors = { -2, 258, 1205, 4060, 40197, 40501, 40613 };
+    private const int MaxRetries = 3;
+
     public SqlDataAccess(string connectionString)
     {
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -56,19 +59,29 @@ public class SqlDataAccess : ISqlDataAccess
             CommandTimeout = 3600
         };
 
-        return await cmd.ExecuteReaderAsync(CommandBehavior.CloseConnection, ct);
+        return await cmd.ExecuteReaderAsync(
+            CommandBehavior.CloseConnection | CommandBehavior.SequentialAccess, ct);
     }
 
     /// <inheritdoc/>
     public async Task<long> GetRowCountAsync(string tableName, CancellationToken ct = default)
     {
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync(ct);
-
-        var sql = $"SELECT COUNT_BIG(*) FROM [{tableName}]";
-        await using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 600 };
-        var result = await cmd.ExecuteScalarAsync(ct);
-        return Convert.ToInt64(result);
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await using var conn = new SqlConnection(_connectionString);
+                await conn.OpenAsync(ct);
+                var sql = $"SELECT COUNT_BIG(*) FROM [{tableName}]";
+                await using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 600 };
+                var result = await cmd.ExecuteScalarAsync(ct);
+                return Convert.ToInt64(result);
+            }
+            catch (SqlException ex) when (attempt < MaxRetries && TransientSqlErrors.Contains(ex.Number))
+            {
+                await Task.Delay(TimeSpan.FromSeconds(attempt * 2), ct);
+            }
+        }
     }
 
     /// <inheritdoc/>
@@ -149,11 +162,21 @@ public class SqlDataAccess : ISqlDataAccess
             WHERE object_id = OBJECT_ID(@name) AND type = 'U'
             """;
 
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
-        cmd.Parameters.AddWithValue("@name", tableName);
-        var result = await cmd.ExecuteScalarAsync(ct);
-        return Convert.ToInt32(result) > 0;
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await using var conn = new SqlConnection(_connectionString);
+                await conn.OpenAsync(ct);
+                await using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 30 };
+                cmd.Parameters.AddWithValue("@name", tableName);
+                var result = await cmd.ExecuteScalarAsync(ct);
+                return Convert.ToInt32(result) > 0;
+            }
+            catch (SqlException ex) when (attempt < MaxRetries && TransientSqlErrors.Contains(ex.Number))
+            {
+                await Task.Delay(TimeSpan.FromSeconds(attempt * 2), ct);
+            }
+        }
     }
 }

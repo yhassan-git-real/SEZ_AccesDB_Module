@@ -157,7 +157,7 @@ public class OrchestratorService
             FileNames          = result.FileNamesSummary,
             RowsCount          = result.TotalRowsRead,
             Message            = result.Success ? "Success" : result.ErrorMessage,
-            Comment            = $"Duration: {result.Duration.TotalSeconds:F1}s | Files: {result.TotalFilesCreated} | OutputDir: {_settings.FileSettings.OutputPath}"
+            Comment            = $"Duration: {result.DurationFormatted} | Files: {result.TotalFilesCreated} | OutputDir: {_settings.FileSettings.OutputPath}"
         };
         await _audit.WriteAuditAsync(record, ct);
     }

@@ -9,14 +9,18 @@ namespace SEZ_AccesDB_Module.Infrastructure.Access;
 /// <summary>
 /// Creates .accdb files and bulk-inserts data via DAO COM API.
 /// DAO bypasses OleDB SQL parsing overhead, giving 3–5× faster bulk write throughput.
-/// Rows are pre-buffered from SQL Server in chunks to separate SQL I/O from disk I/O.
+///
+/// Write strategy: one persistent STA thread opens a single DAO session per file.
+/// The main thread buffers rows from SQL Server in chunks and hands them to the STA writer,
+/// keeping SQL I/O and Access disk I/O on separate threads.
+///
 /// Requires: Microsoft Access Database Engine 2016 Redistributable (64-bit)
 /// </summary>
 public class AccessDbWriter : IAccessDbWriter
 {
     private readonly ILogger<AccessDbWriter> _logger;
 
-    private const int ReadChunkSize    = 50_000;  // rows buffered from SQL per DAO write pass
+    private const int ReadChunkSize    = 50_000;  // rows buffered from SQL per write pass
     private const int ProgressInterval = 10_000;  // UI progress update frequency
 
     public AccessDbWriter(ILogger<AccessDbWriter> logger)
@@ -36,50 +40,36 @@ public class AccessDbWriter : IAccessDbWriter
         CancellationToken ct = default)
     {
         var columns = BuildColumnDefinitions(schema);
+        bool fileCreated = false;
 
-        CreateAccessDatabase(filePath);
-
-        using (var schemaConn = new OleDbConnection(BuildConnectionString(filePath)))
+        try
         {
-            schemaConn.Open();
-            CreateTableInAccess(schemaConn, tableName, columns);
-        } // OleDB connection must be fully closed before DAO opens the same file
+            CreateAccessDatabase(filePath);
+            fileCreated = true;
 
-        // ACE engine needs a moment to release its file lock before DAO acquires it
-        await Task.Delay(200, ct);
-
-        long totalWritten   = 0;
-        long totalAttempted = 0;
-
-        while (totalAttempted < rowCount && !ct.IsCancellationRequested)
-        {
-            var chunk = new List<object[]>(ReadChunkSize);
-
-            while (chunk.Count < ReadChunkSize && totalAttempted < rowCount)
+            using (var conn = new OleDbConnection(BuildConnectionString(filePath)))
             {
-                ct.ThrowIfCancellationRequested();
-                if (!reader.Read()) { totalAttempted = rowCount; break; }
-                totalAttempted++;
+                conn.Open();
+                CreateTableInAccess(conn, tableName, columns);
+            } // OleDB connection must be fully closed before DAO opens the same file
 
-                var row = new object[columns.Count];
-                for (int c = 0; c < columns.Count; c++)
-                    row[c] = c < reader.FieldCount ? reader.GetValue(c) : DBNull.Value;
-                chunk.Add(row);
-            }
+            long totalWritten   = 0;
+            long totalAttempted = 0;
 
-            if (chunk.Count == 0) break;
+            // Shared state (accessed sequentially, never concurrently)
+            List<object[]>? currentChunk  = null;
+            long currentChunkStart        = 0;
+            long currentChunkWritten      = 0;
+            Exception? staException       = null;
 
-            // DAO COM objects require STA apartment — thread pool threads are MTA
-            long chunkStart   = totalAttempted - chunk.Count;
-            long chunkWritten = 0;
-            Exception? daoEx  = null;
+            // work: main → STA (chunk ready, or null=stop)
+            // done: STA → main (chunk written, or error)
+            using var work = new SemaphoreSlim(0);
+            using var done = new SemaphoreSlim(0);
 
             var staThread = new Thread(() =>
             {
-                dynamic? engine = null;
-                dynamic? db     = null;
-                dynamic? rs     = null;
-
+                dynamic? engine = null, db = null, rs = null;
                 try
                 {
                     var engineType =
@@ -90,38 +80,62 @@ public class AccessDbWriter : IAccessDbWriter
                             "Ensure Microsoft Access Database Engine 2016 Redistributable is installed.");
 
                     engine = Activator.CreateInstance(engineType)!;
-                    db = engine.OpenDatabase(filePath);
-                    rs = db.OpenRecordset(tableName, 1); // dbOpenTable — fastest mode for bulk writes
 
-                    for (int i = 0; i < chunk.Count; i++)
+                    // Exponential-backoff retry: waits for OleDB to release the file lock
+                    for (int attempt = 1; ; attempt++)
                     {
-                        try
-                        {
-                            rs.AddNew();
+                        try { db = engine.OpenDatabase(filePath); break; }
+                        catch when (attempt < 6) { Thread.Sleep(50 * (1 << attempt)); } // 100,200,400,800,1600ms
+                    }
 
-                            var rowData = chunk[i];
-                            for (int col = 0; col < columns.Count; col++)
+                    rs = db.OpenRecordset(tableName, 1); // dbOpenTable — fastest bulk-write mode
+
+                    while (true)
+                    {
+                        work.Wait(); // block until chunk or sentinel
+
+                        var chunk = currentChunk;
+                        if (chunk == null || ct.IsCancellationRequested)
+                        {
+                            done.Release();
+                            break;
+                        }
+
+                        long written = 0;
+                        long start   = currentChunkStart;
+
+                        for (int i = 0; i < chunk.Count; i++)
+                        {
+                            if (ct.IsCancellationRequested) break;
+                            try
                             {
-                                object val = CoerceValue(rowData[col], columns[col].NetType);
-                                if (val != DBNull.Value)
-                                    rs.Fields[columns[col].Name].Value = val;
+                                rs.AddNew();
+                                var row = chunk[i];
+                                for (int col = 0; col < columns.Count; col++)
+                                {
+                                    var val = CoerceValue(row[col], columns[col].NetType);
+                                    if (val != DBNull.Value)
+                                        rs.Fields[columns[col].Name].Value = val;
+                                }
+                                rs.Update();
+                                written++;
+                                if (written % ProgressInterval == 0)
+                                    onProgress?.Invoke(totalWritten + written);
                             }
-
-                            rs.Update();
-                            chunkWritten++;
-
-                            if (chunkWritten % ProgressInterval == 0)
-                                onProgress?.Invoke(totalWritten + chunkWritten);
+                            catch (Exception rowEx)
+                            {
+                                onRowError?.Invoke(start + i + 1, rowEx);
+                            }
                         }
-                        catch (Exception rowEx)
-                        {
-                            onRowError?.Invoke(chunkStart + i + 1, rowEx);
-                        }
+
+                        currentChunkWritten = written;
+                        done.Release(); // signal main: chunk is done
                     }
                 }
                 catch (Exception ex)
                 {
-                    daoEx = ex;
+                    staException = ex;
+                    done.Release(); // unblock main so it doesn't deadlock
                 }
                 finally
                 {
@@ -135,27 +149,69 @@ public class AccessDbWriter : IAccessDbWriter
 
             staThread.SetApartmentState(ApartmentState.STA);
             staThread.IsBackground = true;
-            staThread.Name = $"DAO-Writer-chunk-{chunkStart}";
             staThread.Start();
 
-            // Join without blocking the thread pool
-            await Task.Run(() => staThread.Join(), ct);
-
-            if (daoEx != null)
+            try
             {
-                _logger.LogError(daoEx, "DAO write failed at row offset {Offset}", chunkStart);
-                throw daoEx;
+                while (totalAttempted < rowCount && !ct.IsCancellationRequested)
+                {
+                    // Buffer chunk from SQL Server
+                    var chunk = new List<object[]>(ReadChunkSize);
+                    while (chunk.Count < ReadChunkSize && totalAttempted < rowCount)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        if (!reader.Read()) { totalAttempted = rowCount; break; }
+                        totalAttempted++;
+
+                        var row = new object[columns.Count];
+                        for (int c = 0; c < columns.Count; c++)
+                            row[c] = c < reader.FieldCount ? reader.GetValue(c) : DBNull.Value;
+                        chunk.Add(row);
+                    }
+
+                    if (chunk.Count == 0) break;
+
+                    // Hand chunk to STA writer thread
+                    currentChunk      = chunk;
+                    currentChunkStart = totalAttempted - chunk.Count;
+                    work.Release();
+
+                    // Wait for STA to finish this chunk (async — doesn't block thread pool)
+                    await done.WaitAsync(ct);
+
+                    if (staException != null)
+                    {
+                        _logger.LogError(staException, "DAO write failed at row offset {Offset}", currentChunkStart);
+                        throw staException;
+                    }
+
+                    totalWritten += currentChunkWritten;
+                    onProgress?.Invoke(totalWritten);
+                }
+            }
+            finally
+            {
+                // Send null sentinel regardless of success/cancel/exception
+                currentChunk = null;
+                try { work.Release(); } catch { }
+                await Task.Run(() => staThread.Join()); // wait for STA to exit cleanly
             }
 
-            totalWritten += chunkWritten;
-            onProgress?.Invoke(totalWritten);
+            if (staException != null) throw staException;
+
+            _logger.LogInformation(
+                "DAO write complete → {File} | Rows: {Written:N0} / Attempted: {Attempted:N0}",
+                Path.GetFileName(filePath), totalWritten, totalAttempted);
+
+            return totalWritten;
         }
-
-        _logger.LogInformation(
-            "DAO write complete → {File} | Rows written: {Written:N0} / Attempted: {Attempted:N0}",
-            Path.GetFileName(filePath), totalWritten, totalAttempted);
-
-        return totalWritten;
+        catch
+        {
+            // Don't leave a corrupt or partial .accdb file on disk
+            if (fileCreated && File.Exists(filePath))
+                try { File.Delete(filePath); } catch { }
+            throw;
+        }
     }
 
     private static void CreateAccessDatabase(string filePath)

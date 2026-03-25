@@ -29,4 +29,9 @@ public class ExecutionResult
     public double RowsPerSecond => WriteTime.TotalSeconds > 0
         ? TotalRowsRead / WriteTime.TotalSeconds
         : 0;
+
+    /// <summary>Duration formatted as "Xm Ys" (>= 1 min) or "X.Xs" (< 1 min).</summary>
+    public string DurationFormatted => Duration.TotalMinutes >= 1
+        ? $"{(int)Duration.TotalMinutes}m {Duration.Seconds:D2}s"
+        : $"{Duration.TotalSeconds:F1}s";
 }

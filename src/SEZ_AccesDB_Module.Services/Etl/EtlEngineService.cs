@@ -110,7 +110,11 @@ public class EtlEngineService : IEtlEngine
                     ? _fileManager.GetSingleFilePath(_settings.FileSettings.OutputPath, context.OutputFilePrefix, context.StartTime, _settings.FileSettings.Extension)
                     : _fileManager.GetChunkFilePath(_settings.FileSettings.OutputPath, context.OutputFilePrefix, fileIndex, context.StartTime, _settings.FileSettings.Extension);
 
-                var tableRows = await _sql.GetRowCountAsync(sourceTable, ct);
+                // Reuse the count already fetched in Step 2 for the base staging table;
+                // only query again for SP-created sub-tables (different tables).
+                var tableRows = (sourceTables.Count == 1)
+                    ? totalRows
+                    : await _sql.GetRowCountAsync(sourceTable, ct);
 
                 _logger.LogInformation("[{Pid}] File {N}/{Total}: [{Src}] → {File} ({Rows:N0} rows)",
                     context.ProcessId, fileIndex, sourceTables.Count, sourceTable, filePath, tableRows);

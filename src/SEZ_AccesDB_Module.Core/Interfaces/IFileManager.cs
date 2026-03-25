@@ -1,5 +1,3 @@
-using SEZ_AccesDB_Module.Core.Models;
-using SEZ_AccesDB_Module.Core.Configuration;
 
 namespace SEZ_AccesDB_Module.Core.Interfaces;
 
@@ -17,11 +15,6 @@ public interface IFileManager
     /// Generates the full output file path for a named chunk file.
     /// </summary>
     string GetChunkFilePath(string outputDir, string prefix, int chunkIndex, DateTime date, string extension);
-
-    /// <summary>
-    /// Computes a list of chunk ranges based on total row count and split config.
-    /// </summary>
-    List<ChunkRange> ComputeChunks(long totalRows, long threshold, long chunkSize);
 
     /// <summary>
     /// Ensures the output directory exists.
