@@ -5,6 +5,7 @@ Requirement.md
 ## ── .NET Build Artifacts ─────────────────────────────────────────────────────
 bin/
 obj/
+publish/
 *.user
 *.suo
 .vs/
