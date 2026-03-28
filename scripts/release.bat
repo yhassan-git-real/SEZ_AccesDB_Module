@@ -1,13 +1,14 @@
 @echo off
-:: ─────────────────────────────────────────────────────────────────────────────
-:: release.bat  —  Release build (optimised, no debug symbols)
-:: ─────────────────────────────────────────────────────────────────────────────
+chcp 65001 >nul
+:: -------------------------------------------------------------------------------
+:: release.bat  -  Release build (optimised, no debug symbols)
+:: -------------------------------------------------------------------------------
 setlocal
 set SLN=%~dp0..\SEZ_AccesDB_Module.sln
 
 echo.
 echo [BUILD] Configuration: Release
-echo ─────────────────────────────────────────────────────────────────────────────
+echo -------------------------------------------------------------------------------
 dotnet build "%SLN%" --configuration Release --nologo
 if %errorlevel% neq 0 (
     echo.

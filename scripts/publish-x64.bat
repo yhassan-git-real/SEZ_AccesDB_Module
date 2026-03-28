@@ -1,12 +1,13 @@
 @echo off
-:: ─────────────────────────────────────────────────────────────────────────────
-:: publish-x64.bat  —  Self-contained single-file publish for Windows x64
+chcp 65001 >nul
+:: -------------------------------------------------------------------------------
+:: publish-x64.bat  -  Self-contained single-file publish for Windows x64
 ::
 :: Output: ..\publish\win-x64\
 ::   - Single .exe with all dependencies bundled
 ::   - No .NET runtime required on the target machine
 ::   - Requires Microsoft Access Database Engine 2016 (64-bit) on target
-:: ─────────────────────────────────────────────────────────────────────────────
+:: -------------------------------------------------------------------------------
 setlocal
 set PROJ=%~dp0..\src\SEZ_AccesDB_Module\SEZ_AccesDB_Module.csproj
 set OUTPUT=%~dp0..\publish\win-x64
@@ -14,7 +15,7 @@ set OUTPUT=%~dp0..\publish\win-x64
 echo.
 echo [PUBLISH] Self-contained ^| win-x64 ^| Release
 echo [PUBLISH] Output: %OUTPUT%
-echo ─────────────────────────────────────────────────────────────────────────────
+echo -------------------------------------------------------------------------------
 call "%~dp0check-prereqs.bat" || exit /b 1
 echo.
 dotnet publish "%PROJ%" ^

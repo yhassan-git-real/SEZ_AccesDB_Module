@@ -1,8 +1,9 @@
 @echo off
-:: ─────────────────────────────────────────────────────────────────────────────
-:: run-release.bat  —  Run the self-contained published win-x64 executable
+chcp 65001 >nul
+:: -------------------------------------------------------------------------------
+:: run-release.bat  -  Run the self-contained published win-x64 executable
 ::                     Build it first with: publish-x64.bat
-:: ─────────────────────────────────────────────────────────────────────────────
+:: -------------------------------------------------------------------------------
 setlocal
 set EXE=%~dp0publish\win-x64\SEZ_AccesDB_Module.exe
 
@@ -19,6 +20,6 @@ if not exist "%EXE%" (
 
 echo.
 echo [RUN] Launching published release build...
-echo ─────────────────────────────────────────────────────────────────────────────
+echo -------------------------------------------------------------------------------
 "%EXE%"
 endlocal

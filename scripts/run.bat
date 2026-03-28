@@ -1,13 +1,14 @@
 @echo off
-:: ─────────────────────────────────────────────────────────────────────────────
-:: run.bat  —  Build (Debug) and run the application
-:: ─────────────────────────────────────────────────────────────────────────────
+chcp 65001 >nul
+:: -------------------------------------------------------------------------------
+:: run.bat  -  Build (Debug) and run the application
+:: -------------------------------------------------------------------------------
 setlocal
 set PROJ=%~dp0..\src\SEZ_AccesDB_Module\SEZ_AccesDB_Module.csproj
 
 echo.
 echo [RUN] Starting SEZ AccesDB Module...
-echo ─────────────────────────────────────────────────────────────────────────────
+echo -------------------------------------------------------------------------------
 call "%~dp0check-prereqs.bat" || exit /b 1
 echo.
 dotnet run --project "%PROJ%" --configuration Debug --nologo
