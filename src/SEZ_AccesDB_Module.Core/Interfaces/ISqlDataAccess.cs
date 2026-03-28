@@ -43,4 +43,9 @@ public interface ISqlDataAccess
     /// Used to detect SP-created sub-tables (e.g. EXP_OTHERS_1, EXP_OTHERS_2).
     /// </summary>
     Task<bool> TableExistsAsync(string tableName, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the total size of a table (data + index) in bytes.
+    /// </summary>
+    Task<long> GetTableSizeBytesAsync(string tableName, CancellationToken ct = default);
 }

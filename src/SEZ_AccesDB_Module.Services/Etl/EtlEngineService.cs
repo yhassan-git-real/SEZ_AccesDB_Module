@@ -166,8 +166,11 @@ public class EtlEngineService : IEtlEngine
                         progressTask.Value = progressTask.MaxValue;
                     });
 
+                var tableSizeBytes = await _sql.GetTableSizeBytesAsync(sourceTable, ct);
+                var fileSizeBytes = new FileInfo(filePath).Length;
+
                 result.TotalRowsRead    += fileRowsWritten;
-                result.OutputFilePaths.Add(filePath);
+                result.OutputFiles.Add(new OutputFileDetail(filePath, sourceTable, fileRowsWritten, tableSizeBytes, fileSizeBytes));
                 result.SuccessFileCount++;
 
                 var errNote = fileRowErrors > 0

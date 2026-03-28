@@ -88,6 +88,12 @@ public static class ConsoleUiService
         if (result.RowsPerSecond > 0)
             table.AddRow("[grey]  Write Speed[/]",  $"[grey]{result.RowsPerSecond:N0} rows/sec[/]");
 
+        if (result.OutputFiles.Count > 0)
+        {
+            table.AddRow("Total Table Size", $"[cyan]{ExecutionResult.FormatBytes(result.TotalTableSizeBytes)}[/]");
+            table.AddRow("Total File Size",  $"[cyan]{ExecutionResult.FormatBytes(result.TotalFileSizeBytes)}[/]");
+        }
+
         table.AddRow("Total Files",      result.TotalFilesCreated.ToString());
         table.AddRow("Success Files",    $"[green]{result.SuccessFileCount}[/]");
         table.AddRow("Error Files",      result.ErrorFileCount > 0 ? $"[red]{result.ErrorFileCount}[/]" : "0");
@@ -103,12 +109,15 @@ public static class ConsoleUiService
         AnsiConsole.Write(table);
 
         // Output files list
-        if (result.OutputFilePaths.Count > 0)
+        if (result.OutputFiles.Count > 0)
         {
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[bold]Output Files:[/]");
-            foreach (var f in result.OutputFilePaths)
-                AnsiConsole.MarkupLine($"  [green]✓[/] {Markup.Escape(f)}");
+            foreach (var f in result.OutputFiles)
+            {
+                var rowInfo = $"({f.Rows:N0} rows | Table: {ExecutionResult.FormatBytes(f.TableSizeBytes)} | File: {ExecutionResult.FormatBytes(f.FileSizeBytes)})";
+                AnsiConsole.MarkupLine($"  [green]✓[/] {Markup.Escape(Path.GetFileName(f.Path))} [grey]{Markup.Escape(rowInfo)}[/]");
+            }
         }
 
         // Warnings
@@ -140,6 +149,7 @@ public static class ConsoleUiService
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────────────
+
 
     /// <summary>Formats a TimeSpan as "Xm Ys" (>= 1 min) or "X.Xs" (< 1 min).</summary>
     private static string FormatDuration(TimeSpan ts) =>

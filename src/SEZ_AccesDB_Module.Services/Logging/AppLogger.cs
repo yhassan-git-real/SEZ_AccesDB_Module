@@ -101,9 +101,14 @@ public static class AppLogger
         long rowsWritten,
         int filesCreated,
         TimeSpan duration,
-        IEnumerable<string> outputFiles)
+        IEnumerable<SEZ_AccesDB_Module.Core.Models.OutputFileDetail> outputFiles)
     {
-        var fileList = string.Join("\n                     ", outputFiles.Select(Path.GetFileName));
+        var fileList = string.Join("\n                     ", outputFiles.Select(f => 
+            $"{Path.GetFileName(f.Path)} (Table: {SEZ_AccesDB_Module.Core.Models.ExecutionResult.FormatBytes(f.TableSizeBytes)} | File: {SEZ_AccesDB_Module.Core.Models.ExecutionResult.FormatBytes(f.FileSizeBytes)})"));
+        
+        long totalTableBytes = outputFiles.Sum(f => f.TableSizeBytes);
+        long totalFileBytes = outputFiles.Sum(f => f.FileSizeBytes);
+
         Log.ForContext(SuccessTagProperty, true)
            .Information(
                "✔  SP Execution SUCCEEDED\n" +
@@ -111,9 +116,14 @@ public static class AppLogger
                "     Parameters  : {Params}\n" +
                "     Process ID  : {PID}\n" +
                "     Rows Written: {Rows}\n" +
+               "     Table Size  : {TableSize}\n" +
+               "     File Size   : {FileSize}\n" +
                "     Files       : {Files}\n" +
                "     Duration    : {Duration}",
-               spName, parameters, processId, $"{rowsWritten:N0}", fileList, FormatDuration(duration));
+               spName, parameters, processId, $"{rowsWritten:N0}", 
+               SEZ_AccesDB_Module.Core.Models.ExecutionResult.FormatBytes(totalTableBytes), 
+               SEZ_AccesDB_Module.Core.Models.ExecutionResult.FormatBytes(totalFileBytes), 
+               fileList, FormatDuration(duration));
     }
 
     /// <summary>

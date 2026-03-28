@@ -179,4 +179,34 @@ public class SqlDataAccess : ISqlDataAccess
             }
         }
     }
+
+    /// <inheritdoc/>
+    public async Task<long> GetTableSizeBytesAsync(string tableName, CancellationToken ct = default)
+    {
+        const string sql = """
+            SELECT ISNULL(SUM(a.total_pages) * 8192, 0) AS SizeBytes
+            FROM sys.tables t
+            INNER JOIN sys.indexes i ON t.object_id = i.object_id
+            INNER JOIN sys.partitions p ON i.object_id = p.object_id AND i.index_id = p.index_id
+            INNER JOIN sys.allocation_units a ON p.partition_id = a.container_id
+            WHERE t.name = @tableName
+            """;
+
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await using var conn = new SqlConnection(_connectionString);
+                await conn.OpenAsync(ct);
+                await using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 60 };
+                cmd.Parameters.AddWithValue("@tableName", tableName);
+                var result = await cmd.ExecuteScalarAsync(ct);
+                return Convert.ToInt64(result);
+            }
+            catch (SqlException ex) when (attempt < MaxRetries && TransientSqlErrors.Contains(ex.Number))
+            {
+                await Task.Delay(TimeSpan.FromSeconds(attempt * 2), ct);
+            }
+        }
+    }
 }

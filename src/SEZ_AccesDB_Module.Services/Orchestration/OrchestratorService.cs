@@ -116,7 +116,7 @@ public class OrchestratorService
                         rowsWritten:  result.TotalRowsRead,
                         filesCreated: result.TotalFilesCreated,
                         duration:     result.Duration,
-                        outputFiles:  result.OutputFilePaths);
+                        outputFiles:  result.OutputFiles);
                 }
 
                 // Audit record
@@ -157,7 +157,7 @@ public class OrchestratorService
             FileNames          = result.FileNamesSummary,
             RowsCount          = result.TotalRowsRead,
             Message            = result.Success ? "Success" : result.ErrorMessage,
-            Comment            = $"Duration: {result.DurationFormatted} | Files: {result.TotalFilesCreated} | OutputDir: {_settings.FileSettings.OutputPath}"
+            Comment            = $"Duration: {result.DurationFormatted} | Files: {result.TotalFilesCreated} | Total Table Size: {result.TotalTableSizeBytesFormatted} | Total File Size: {result.TotalFileSizeBytesFormatted} | OutputDir: {_settings.FileSettings.OutputPath}"
         };
         await _audit.WriteAuditAsync(record, ct);
     }
