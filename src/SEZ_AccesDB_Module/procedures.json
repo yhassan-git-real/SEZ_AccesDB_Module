@@ -17,6 +17,14 @@
       "FilePrefix": "Export_FULL"
     },
     {
+      "Name": "Others_EXP_FULL_NEW",
+      "DisplayName": "Export FULL NEW (Between Two Dates)",
+      "DataType": "Export",
+      "StagingTable": "EXP_OTHERS_FULL",
+      "Parameters": [ "mon", "mon1" ],
+      "FilePrefix": "Export_FULL_NEW"
+    },
+    {
       "Name": "Others_EXP_new",
       "DisplayName": "Export New (Between Two Dates)",
       "DataType": "Export",
