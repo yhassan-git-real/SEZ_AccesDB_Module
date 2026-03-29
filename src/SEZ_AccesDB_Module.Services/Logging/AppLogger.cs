@@ -39,7 +39,7 @@ public static class AppLogger
         var errorLogPath   = Path.Combine(logDirectory, $"errorlog_{sessionStamp}.txt");
 
         const string execTemplate =
-            "[{Timestamp:yyyy-MM-dd HH:mm:ss}] [{Level,-11}]  {Message:lj}{NewLine}{Exception}";
+            "[{Timestamp:yyyy-MM-dd HH:mm:ss}] [{Level,-11}]  {Message:lj}{NewLine}";
 
         const string successTemplate =
             "[{Timestamp:yyyy-MM-dd HH:mm:ss}] [SUCCESS]  {Message:lj}{NewLine}";
@@ -47,7 +47,6 @@ public static class AppLogger
         const string errorTemplate =
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{NewLine}" +
             "[{Timestamp:yyyy-MM-dd HH:mm:ss}] [{Level,-11}]  {Message:lj}{NewLine}" +
-            "{Exception}" +
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{NewLine}";
 
         _instance = new LoggerConfiguration()
@@ -139,22 +138,13 @@ public static class AppLogger
     {
         var logger = Log.ForContext("SpName", spName).ForContext("ProcessId", processId);
 
-        if (ex != null)
-            logger.Error(ex,
-                "✘  SP Execution FAILED\n" +
-                "     Procedure  : {SP}\n" +
-                "     Parameters : {Params}\n" +
-                "     Process ID : {PID}\n" +
-                "     Error      : {Error}",
-                spName, parameters, processId, errorMessage);
-        else
-            logger.Error(
-                "✘  SP Execution FAILED\n" +
-                "     Procedure  : {SP}\n" +
-                "     Parameters : {Params}\n" +
-                "     Process ID : {PID}\n" +
-                "     Error      : {Error}",
-                spName, parameters, processId, errorMessage);
+        logger.Error(
+            "✘  SP Execution FAILED\n" +
+            "     Procedure  : {SP}\n" +
+            "     Parameters : {Params}\n" +
+            "     Process ID : {PID}\n" +
+            "     Error      : {Error}",
+            spName, parameters, processId, errorMessage);
     }
 
     public static void CloseAndFlush()

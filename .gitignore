@@ -37,3 +37,8 @@ desktop.ini
 ## ── Sensitive config (keep appsettings in repo, exclude overrides) ───────────
 appsettings.Production.json
 appsettings.Local.json
+
+## ── Database Automation Scripts ──────────────────────────────────────────────
+tools/ConfigValidator/Reports/
+
+

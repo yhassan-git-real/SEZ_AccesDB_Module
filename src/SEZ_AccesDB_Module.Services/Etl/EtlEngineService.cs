@@ -4,6 +4,7 @@ using SEZ_AccesDB_Module.Core.Configuration;
 using SEZ_AccesDB_Module.Core.Interfaces;
 using SEZ_AccesDB_Module.Core.Models;
 using SEZ_AccesDB_Module.Services.Logging;
+using SEZ_AccesDB_Module.Services.UI;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
 using ExecutionContext = SEZ_AccesDB_Module.Core.Models.ExecutionContext;
@@ -18,6 +19,7 @@ public class EtlEngineService : IEtlEngine
     private readonly ISqlDataAccess          _sql;
     private readonly IAccessDbWriter         _accessWriter;
     private readonly IFileManager            _fileManager;
+    private readonly IThresholdValidator     _validator;
     private readonly AppSettings             _settings;
     private readonly ILogger<EtlEngineService> _logger;
 
@@ -25,12 +27,14 @@ public class EtlEngineService : IEtlEngine
         ISqlDataAccess sql,
         IAccessDbWriter accessWriter,
         IFileManager fileManager,
+        IThresholdValidator validator,
         AppSettings settings,
         ILogger<EtlEngineService> logger)
     {
         _sql          = sql;
         _accessWriter = accessWriter;
         _fileManager  = fileManager;
+        _validator    = validator;
         _settings     = settings;
         _logger       = logger;
     }
@@ -74,14 +78,26 @@ public class EtlEngineService : IEtlEngine
 
             // ── Step 3: Detect SP-created sub-tables ─────────────────────────────
             // SPs exceeding their row threshold split data into {StagingTable}_1, _2 ...
-            AnsiConsole.MarkupLine($"[cyan][[3/5]][/] Detecting SP sub-tables for [bold]{Markup.Escape(spDef.StagingTable)}[/]...");
+            AnsiConsole.MarkupLine($"[cyan][[3/6]][/] Detecting SP sub-tables for [bold]{Markup.Escape(spDef.StagingTable)}[/]...");
             var sourceTables = await ResolveSourceTablesAsync(spDef.StagingTable, ct);
-
-            result.TotalFilesCreated = sourceTables.Count;
 
             if (sourceTables.Count == 1 && sourceTables[0] == spDef.StagingTable)
             {
                 AnsiConsole.MarkupLine($"  [grey]No sub-tables found — writing single file from [[{Markup.Escape(spDef.StagingTable)}]].[/]");
+
+                // Single-table threshold warning: catch cases where the SP split logic didn't fire
+                if (spDef.Threshold > 0 && totalRows > spDef.Threshold)
+                {
+                    AnsiConsole.MarkupLine(
+                        $"[yellow]  ⚠  Warning: Staging table [{Markup.Escape(spDef.StagingTable)}] has {totalRows:N0} rows " +
+                        $"which exceeds the threshold of {spDef.Threshold:N0}. SP split logic did not trigger.[/]");
+                    _logger.LogWarning(
+                        "[{Pid}] Single staging table [{Table}] has {Rows:N0} rows exceeding threshold {Threshold:N0} but SP did not split.",
+                        context.ProcessId, spDef.StagingTable, totalRows, spDef.Threshold);
+                    result.Warnings.Add(
+                        $"Staging table [{spDef.StagingTable}] has {totalRows:N0} rows (threshold: {spDef.Threshold:N0}). " +
+                        "SP split logic did not trigger — Access file may be oversized.");
+                }
             }
             else
             {
@@ -92,11 +108,77 @@ public class EtlEngineService : IEtlEngine
                     context.ProcessId, string.Join(", ", sourceTables));
             }
 
-            // ── Step 4: Ensure Output Directory ──────────────────────────────────
+            // ── Step 4: Threshold Validation ─────────────────────────────────────
+            // Validate split table row counts against the configured threshold.
+            // Only activates when sub-tables exist AND a threshold is configured.
+            if (sourceTables.Count > 1 && spDef.Threshold > 0)
+            {
+                AnsiConsole.MarkupLine($"[cyan][[4/6]][/] Validating split table row counts against threshold [bold yellow]{spDef.Threshold:N0}[/]...");
+
+                var validation = await _validator.ValidateAsync(spDef, sourceTables, ct);
+
+                if (validation.HasViolations)
+                {
+                    _logger.LogWarning(
+                        "[{Pid}] Threshold violations detected: {V}/{T} table(s) exceed {Threshold:N0}",
+                        context.ProcessId, validation.ViolationCount, validation.Tables.Count, spDef.Threshold);
+
+                    var action = ConsoleUiService.PromptThresholdAction(validation);
+
+                    _logger.LogInformation("[{Pid}] User threshold action: {Action}", context.ProcessId, action);
+
+                    switch (action)
+                    {
+                        case ThresholdAction.CancelOperation:
+                            result.Success = false;
+                            result.ErrorMessage = "Operation cancelled by user due to threshold violations.";
+                            _logger.LogWarning("[{Pid}] ETL cancelled by user — threshold violations.", context.ProcessId);
+                            return result;
+
+                        case ThresholdAction.ProcessValidOnly:
+                            var skippedTables = validation.Tables
+                                .Where(t => t.ExceedsThreshold)
+                                .Select(t => t.TableName)
+                                .ToList();
+                            sourceTables = validation.Tables
+                                .Where(t => !t.ExceedsThreshold)
+                                .Select(t => t.TableName)
+                                .ToList();
+
+                            if (sourceTables.Count == 0)
+                            {
+                                result.Success = false;
+                                result.ErrorMessage = "All split tables exceed the threshold — no tables to process.";
+                                _logger.LogWarning("[{Pid}] All tables exceed threshold — nothing to process.", context.ProcessId);
+                                return result;
+                            }
+
+                            var skippedMsg = $"Skipped {skippedTables.Count} table(s) exceeding threshold: {string.Join(", ", skippedTables)}";
+                            result.Warnings.Add(skippedMsg);
+                            _logger.LogInformation("[{Pid}] {Msg}", context.ProcessId, skippedMsg);
+                            AnsiConsole.MarkupLine($"[yellow]  ⚠  {Markup.Escape(skippedMsg)}[/]");
+                            break;
+
+                        case ThresholdAction.ProcessAll:
+                            var overrideMsg = "User chose to process all tables despite threshold violations.";
+                            result.Warnings.Add(overrideMsg);
+                            _logger.LogInformation("[{Pid}] {Msg}", context.ProcessId, overrideMsg);
+                            break;
+                    }
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("[green]  ✓ All split tables are within the threshold.[/]");
+                }
+            }
+
+            result.TotalFilesCreated = sourceTables.Count;
+
+            // ── Step 5: Ensure Output Directory ──────────────────────────────────
             _fileManager.EnsureOutputDirectory(_settings.FileSettings.OutputPath);
 
-            // ── Step 5: Stream + write one Access file per source table ───────────
-            AnsiConsole.MarkupLine($"[cyan][[4/5]][/] Writing {sourceTables.Count} Access file(s)...\n");
+            // ── Step 6: Stream + write one Access file per source table ───────────
+            AnsiConsole.MarkupLine($"[cyan][[5/6]][/] Writing {sourceTables.Count} Access file(s)...\n");
             phaseWatch.Restart();
 
             for (int i = 0; i < sourceTables.Count; i++)
@@ -119,7 +201,7 @@ public class EtlEngineService : IEtlEngine
                 _logger.LogInformation("[{Pid}] File {N}/{Total}: [{Src}] → {File} ({Rows:N0} rows)",
                     context.ProcessId, fileIndex, sourceTables.Count, sourceTable, filePath, tableRows);
 
-                AnsiConsole.MarkupLine($"[cyan][[5/5 – {fileIndex}/{sourceTables.Count}]][/] " +
+                AnsiConsole.MarkupLine($"[cyan][[6/6 – {fileIndex}/{sourceTables.Count}]][/] " +
                     $"[bold]{Markup.Escape(Path.GetFileName(filePath))}[/] " +
                     $"← [grey]{Markup.Escape(sourceTable)}[/] ({tableRows:N0} rows)");
 
@@ -215,20 +297,21 @@ public class EtlEngineService : IEtlEngine
         }
         catch (Exception ex)
         {
+            var friendly = FriendlyGeneralMessage(ex);
             result.Success = false;
-            result.ErrorMessage = ex.Message;
+            result.ErrorMessage = friendly;
             result.ErrorFileCount++;
 
             AppLogger.LogExecutionError(
                 spName:       context.SpDefinition?.Name ?? "?",
                 parameters:   context.ParameterSummary,
                 processId:    context.ProcessId,
-                errorMessage: ex.Message,
+                errorMessage: friendly,
                 ex:           ex);
 
             AnsiConsole.WriteLine();
             AnsiConsole.Write(
-                new Panel(Markup.Escape(ex.Message))
+                new Panel(Markup.Escape(friendly))
                     .Header("[bold red]  ✘ Unexpected Error  [/]")
                     .Border(BoxBorder.Rounded)
                     .BorderColor(Color.Red));
@@ -274,8 +357,8 @@ public class EtlEngineService : IEtlEngine
     private static string FriendlySqlMessage(SqlException ex) =>
         ex.Number switch
         {
-            208         => $"SQL Server could not find the object referenced in the stored procedure. " +
-                           $"Details: {ex.Message} — Ensure all lookup tables exist in the database.",
+            208         => $"SQL Server could not find a referenced database object. " +
+                           $"Check that the StagingTable in procedures.json is correct, and verify the procedure structure for missing tables. Details: {ex.Message}",
             229 or 230  => $"Permission denied on database object. Check that the SQL login has sufficient rights. Details: {ex.Message}",
             18456       => "SQL Server login failed. Verify the connection string credentials in appsettings.json.",
             -2 or 258   => "The stored procedure took too long and timed out. Try a narrower date range, or the server is under heavy load.",
@@ -284,4 +367,25 @@ public class EtlEngineService : IEtlEngine
             547         => $"A foreign key or constraint violation occurred. Details: {ex.Message}",
             _           => $"SQL Server error ({ex.Number}): {ex.Message}"
         };
+
+    /// <summary>
+    /// Unrolls generic nested exceptions (like AggregateException) to extract readable inner messages.
+    /// </summary>
+    private static string FriendlyGeneralMessage(Exception ex)
+    {
+        var messages = new List<string>();
+        var current = ex;
+        while (current != null)
+        {
+            var msg = current.Message.Trim();
+            if (!messages.Contains(msg) && 
+                !msg.Contains("One or more errors occurred") &&
+                !msg.Contains("See the inner exception for details"))
+            {
+                messages.Add(msg);
+            }
+            current = current.InnerException;
+        }
+        return messages.Count > 0 ? string.Join(" — ", messages) : "An unknown error occurred.";
+    }
 }

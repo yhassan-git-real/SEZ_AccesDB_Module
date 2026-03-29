@@ -29,6 +29,7 @@ public class StoredProcedureDefinition
     public string StagingTable { get; set; } = string.Empty;
     public List<string> Parameters { get; set; } = new();
     public string FilePrefix { get; set; } = string.Empty;
+    public long Threshold { get; set; }
 }
 
 public class AuditConfig

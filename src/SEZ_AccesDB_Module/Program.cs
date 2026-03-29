@@ -12,6 +12,7 @@ using SEZ_AccesDB_Module.Services.Etl;
 using SEZ_AccesDB_Module.Services.FileManagement;
 using SEZ_AccesDB_Module.Services.Logging;
 using SEZ_AccesDB_Module.Services.Orchestration;
+using SEZ_AccesDB_Module.Services.Validation;
 using Spectre.Console;
 
 // Enable UTF-8 so emoji (✔ ✘ ✓ ⚠ etc.) render correctly in Windows console/PowerShell
@@ -71,6 +72,7 @@ services.AddSingleton<IAuditService>(sp =>
         settings.Audit.TableName,
         settings.Audit.Enabled,
         sp.GetRequiredService<ILogger<AuditService>>()));
+services.AddSingleton<IThresholdValidator, ThresholdValidatorService>();
 services.AddSingleton<IEtlEngine, EtlEngineService>();
 services.AddSingleton<OrchestratorService>();
 
