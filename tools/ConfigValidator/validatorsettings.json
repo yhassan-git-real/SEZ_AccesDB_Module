@@ -1,0 +1,9 @@
+{
+  "ServerName": "MATRIX,1434",
+  "DatabaseName": "RAW_PROCESS_NEW",
+  "Authentication": "Windows",
+  "SqlUser": "",
+  "SqlPassword": "",
+  "ProcedurePath": "../../src/SEZ_AccesDB_Module/procedures.json",
+  "OutputPath": "Reports"
+}

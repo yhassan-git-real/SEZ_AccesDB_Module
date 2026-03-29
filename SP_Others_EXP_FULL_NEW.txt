@@ -1,0 +1,155 @@
+
+CREATE     PROCEDURE [dbo].[Others_EXP_FULL_NEW]
+    @mon  INT,   -- format: YYYYMMDD
+    @mon1 INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    ------------------------------------------------------------------
+    -- 1. CONVERT INT ? DATE
+    ------------------------------------------------------------------
+    DECLARE @StartDate DATE = CONVERT(DATE, CONVERT(VARCHAR(8), @mon));
+    DECLARE @EndDate   DATE = CONVERT(DATE, CONVERT(VARCHAR(8), @mon1));
+
+    ------------------------------------------------------------------
+    -- 2. FULL REFRESH
+    ------------------------------------------------------------------
+    TRUNCATE TABLE dbo.EXP_OTHERS_FULL;
+
+    ------------------------------------------------------------------
+    -- 3. INSERT WITH ALL FILTERS APPLIED (NO DELETE REQUIRED)
+    ------------------------------------------------------------------
+    INSERT INTO dbo.EXP_OTHERS_FULL WITH (TABLOCK)
+    (
+        [CUSTOM],
+        [Shipping Bill],
+        [Shipping Bill Date],
+        [LEO Date],
+        [Item Code],
+        [Item Description],
+        [Item No],
+        [IEC],
+        [Exporter Name],
+        [Buyer Name],
+        [Buyer Address],
+        [Buyer Country],
+        [Country of Destination],
+        [Port of Discharge],
+        [Port Code],
+        [Invoice SerNo],
+        [Invoice No],
+        [Quantity],
+        [Unit],
+        [Item rate],
+        [Currency],
+        [FOB],
+        [Drawback],
+        [State Name],
+        [Number of Units],
+        [FOB Foreign Currency],
+        [IGST Taxable Amount],
+        [IGST Amount Paid],
+        [Customs Broker Name]
+    )
+    SELECT
+        a.PORTID,
+        a.SB_NO_ORG,
+        a.SB_Date,
+        a.LEO_Date,
+        a.Hs_Code,
+        a.Product,
+        a.Item_No,
+        a.IEC,
+        a.[Indian Exporter Name],
+        a.[Foreign Importer Name],
+        ISNULL(a.FOR_Add1, ''),
+        a.[Importer Country],
+        a.[Ctry of Destination],
+        a.[Port of Destination],
+        a.For_Port_Code,
+        a.[Invoice Srl No],
+        a.INVOICE_NO,
+        a.QTY,
+        a.Unit,
+        a.[Unit Rate in Foreign Currency - FC not specified, Very Imp : Som],
+        a.[Unit Rate Currency],
+        a.[Total SB Value in INR in Lacs],
+        a.[DRAW BACK],
+        a.[State],
+        a.[Number_of_Units],
+        a.[FOB_FC],
+        a.[IGST_Taxable_Amount],
+        a.[IGST_Amount_Paid],
+        a.[CHA_NAME]
+    FROM dbo.EXPORT_Monthly a
+    WHERE 
+        -- ? SARGable date filter
+        a.SB_Date >= @StartDate
+        AND a.SB_Date < DATEADD(DAY, 1, @EndDate)
+
+        -- ? SEZ exclusion
+        AND NOT EXISTS
+        (
+            SELECT 1
+            FROM dbo.PORTMST b
+            WHERE b.code = a.PORTID
+              AND b.[update] = 'SEZ'
+        )
+
+        -- ? Defense / restricted filters (moved from DELETE)
+        AND a.Hs_Code NOT LIKE '93%'
+        AND a.IEC NOT IN ('AMDCG0111E','3116910324','0308050029','0599020768','3116927430','AVDPG4598H')
+
+        AND a.Product NOT LIKE '%Indian%Navy%'
+        AND a.Product NOT LIKE '%army%'
+        AND a.Product NOT LIKE '%Air_Force%'
+        AND a.Product NOT LIKE '%defence%'
+        AND a.Product NOT LIKE '%defense%'
+        AND a.Product NOT LIKE '%warship%'
+        AND a.Product NOT LIKE '%sub_marin%'
+        AND a.Product NOT LIKE '%missile%';
+
+    ------------------------------------------------------------------
+    -- 4. FAST ROW COUNT (NO TABLE SCAN)
+    ------------------------------------------------------------------
+    DECLARE @cnt BIGINT;
+
+    SELECT @cnt = SUM(row_count)
+    FROM sys.dm_db_partition_stats
+    WHERE object_id = OBJECT_ID('dbo.EXP_OTHERS_FULL')
+      AND index_id IN (0,1);
+
+    PRINT @cnt;
+
+    ------------------------------------------------------------------
+    -- 5. DROP SPLIT TABLES IF EXIST
+    ------------------------------------------------------------------
+    IF OBJECT_ID('dbo.EXP_OTHERS_FULL_1') IS NOT NULL DROP TABLE dbo.EXP_OTHERS_FULL_1;
+    IF OBJECT_ID('dbo.EXP_OTHERS_FULL_2') IS NOT NULL DROP TABLE dbo.EXP_OTHERS_FULL_2;
+
+    ------------------------------------------------------------------
+    -- 6. SPLIT LOGIC (IF LARGE DATASET)
+    ------------------------------------------------------------------
+    IF @cnt > 2100000
+    BEGIN
+        SELECT *
+        INTO dbo.EXP_OTHERS_FULL_1
+        FROM dbo.EXP_OTHERS_FULL
+        WHERE 
+            [CUSTOM] IN ('INNSA1','INDPC4','INDEL4','INBOM4','INMAA1','INMUN1')
+            AND [Shipping Bill Date] >= @StartDate
+            AND [Shipping Bill Date] < DATEADD(DAY, 1, @EndDate);
+
+        SELECT *
+        INTO dbo.EXP_OTHERS_FULL_2
+        FROM dbo.EXP_OTHERS_FULL
+        WHERE 
+            [CUSTOM] NOT IN ('INNSA1','INDPC4','INDEL4','INBOM4','INMAA1','INMUN1')
+            AND [Shipping Bill Date] >= @StartDate
+            AND [Shipping Bill Date] < DATEADD(DAY, 1, @EndDate);
+    END
+END
+
+
+(1 rows affected)
