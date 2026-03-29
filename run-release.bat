@@ -5,7 +5,8 @@ chcp 65001 >nul
 ::                     Build it first with: publish-x64.bat
 :: -------------------------------------------------------------------------------
 setlocal
-set EXE=%~dp0publish\win-x64\SEZ_AccesDB_Module.exe
+set CONFIG=%~dp0config_path.json
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "(Get-Content '%CONFIG%' | ConvertFrom-Json).ExecutablePath"`) do set "EXE=%%i"
 
 call "%~dp0scripts\check-prereqs.bat" || exit /b 1
 

@@ -9,8 +9,9 @@ chcp 65001 >nul
 ::   - Requires Microsoft Access Database Engine 2016 (64-bit) on target
 :: -------------------------------------------------------------------------------
 setlocal
-set PROJ=%~dp0..\src\SEZ_AccesDB_Module\SEZ_AccesDB_Module.csproj
-set OUTPUT=%~dp0..\publish\win-x64
+set CONFIG=%~dp0..\config_path.json
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "(Get-Content '%CONFIG%' | ConvertFrom-Json).ProjectPath"`) do set "PROJ=%%i"
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "(Get-Content '%CONFIG%' | ConvertFrom-Json).PublishOutput"`) do set "OUTPUT=%%i"
 
 echo.
 echo [PUBLISH] Self-contained ^| win-x64 ^| Release

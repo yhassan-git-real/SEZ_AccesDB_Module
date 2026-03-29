@@ -4,7 +4,8 @@ chcp 65001 >nul
 :: release.bat  -  Release build (optimised, no debug symbols)
 :: -------------------------------------------------------------------------------
 setlocal
-set SLN=%~dp0..\SEZ_AccesDB_Module.sln
+set CONFIG=%~dp0..\config_path.json
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "(Get-Content '%CONFIG%' | ConvertFrom-Json).SolutionPath"`) do set "SLN=%%i"
 
 echo.
 echo [BUILD] Configuration: Release

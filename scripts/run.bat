@@ -4,7 +4,8 @@ chcp 65001 >nul
 :: run.bat  -  Build (Debug) and run the application
 :: -------------------------------------------------------------------------------
 setlocal
-set PROJ=%~dp0..\src\SEZ_AccesDB_Module\SEZ_AccesDB_Module.csproj
+set CONFIG=%~dp0..\config_path.json
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "(Get-Content '%CONFIG%' | ConvertFrom-Json).ProjectPath"`) do set "PROJ=%%i"
 
 echo.
 echo [RUN] Starting SEZ AccesDB Module...
